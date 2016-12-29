@@ -1,0 +1,288 @@
+<?xml version="1.0"?>
+<implementation>
+  <settings>
+    <protocol>cr</protocol>
+  </settings>
+  <functions>
+--[[  
+Read the status of a UPS attached to a NAS using the NUT upsc command.
+
+Version 1.0 29 Dec 2016 by Rene Boer
+
+This is tested with an APC UPS attached to a Synology NAS and NUT on a Rasberry Pi. 
+- Follow these instructions to install NUT https://www.domoticz.com/forum/viewtopic.php?t=2266
+- test the installtion using the command : upsc ups@(your NAS IP)
+
+When on Vera you need a remote server to run the upsc command. 
+Put this php script in the default sever directory. Configure the IP address of your NAS.
+For a Pi with Apache and default settings this is /var/www/html	( note: replace &lt; with left arrow, xml limit )
+&lt;?php
+$nas_ip = '192.168.x.x';
+$output = shell_exec('upsc ups@'.$nas_ip);
+echo "&lt;pre>$output&lt;/pre>";
+?>
+
+When you have installed on openLuup you do not need the php script, but then you need to set the Remote variable to 0.
+
+Install the plugin by uploading the D_UPSSensor1.xml and I_UPSSensor1.xml files to your Vera. Then manually create a device using these two files.
+
+The device is a default door/windows sensor so it will behave as such. Extra variables will be set like Watts, just have a look.
+
+The only configuration required is to set the IP address for the web server running the script in the ip attribute.
+When running local on openLuup you must enter the IP address of your NAS and set the Remote variable to 0.
+	
+Some more background information
+	variables possible http://networkupstools.org/docs/user-manual.chunked/apcs01.html
+	status details APC http://www.mathstat.dal.ca/~selinger/ups/backups.html
+]]	
+
+    local SIDS = { 
+		PLG		= "urn:rboer-com:serviceId:UpsSensor",
+		ALTUI	= "urn:upnp-org:serviceId:altui1",
+		HA_DEV	= "urn:micasaverde-com:serviceId:HaDevice1",
+		ZW_DEV	= "urn:micasaverde-com:serviceId:ZWaveDevice1",
+		SEC		= "urn:micasaverde-com:serviceId:SecuritySensor1",
+		EM_PWR	= "urn:micasaverde-com:serviceId:EnergyMetering1"
+	}
+    local DATA = {
+		Disabled 	= false,
+		DebugMode 	= true,
+		Device 		= nil,
+		ip 			= nil,
+		Version		= "1.0",
+		Description	= "UPS Sensor"
+	}	
+	-- Status codes in ups.status field
+	local UPSSTATUS = {
+		["OFF"]		= { msg = "Off", alarm = false },
+		["OL"]		= { msg = "On Line", alarm = false },
+		["OB"]		= { msg = "On Battery", alarm = true },
+		["LB"]		= { msg = "Low Battery", alarm = true },
+		["RB"]		= { msg = "Replace Battery", alarm = true },
+		["OVER"]	= { msg = "Overload", alarm = true },
+		["TRIM"]	= { msg = "Voltage Trim", alarm = false },
+		["BOOST"]	= { msg = "Voltage Boost", alarm = false },
+		["CAL"]		= { msg = "Calibration", alarm = false },
+		["BYPASS"]	= { msg = "Bypass", alarm = false },
+		["CHRG"]	= { msg = "Charging", alarm = false },
+		["DISCHRG"]	= { msg = "Discharging", alarm = false }
+	}
+
+    function log(text, lev)
+		local lev = (lev or 10)
+        luup.log(DATA.Description .. ": "..text, lev)
+    end
+
+    function debug(text)
+        if (DATA.DebugMode == true) then
+            log(text)
+        end
+    end
+	local function varGet(name, service, device)
+		local value = luup.variable_get(service or SIDS.PLG, name, tonumber(device or DATA.Device))
+		return (value or '')
+	end
+	-- Update variable when value is different than current.
+	local function varSet(name, value, service, device)
+		local service = service or SIDS.PLG
+		local device = tonumber(device or DATA.Device)
+		local old = varGet(name, service, device)
+		if (tostring(value) ~= tostring(old)) then 
+			luup.variable_set(service, name, value, device)
+		end
+	end
+	--get device Variables, creating with default value if non-existent
+	local function defVar(name, default, service, device)
+		local service = service or SIDS.PLG
+		local device = tonumber(device or DATA.Device)
+		local value = luup.variable_get(service, name, device) 
+		if (not value) then
+			value = default	or ''							-- use default value or blank
+			luup.variable_set(service, name, value, device)	-- create missing variable with default value
+		end
+		return value
+	end
+	local function round(num, idp)
+		local mult = 10^(idp or 0)
+		return math.floor(num * mult + 0.5) / mult
+	end
+	-- run UPSC command and capture output.
+	-- All output lines are two or three tuples values seperated by a dot character.
+	local function UPSCapture(ip)
+		local remote = varGet("Remote")
+		local data = ""
+		if remote == "1" then
+			-- Use the script that is on a remote server
+			local res, s = luup.inet.wget("http://"..ip.."/ups.php")
+			if res == 0 then
+				data = s:match("&lt;pre>(.+)&lt;/pre>")
+			else
+				return false, nil
+			end    
+		else
+			-- Run the command locally
+			local f = io.popen("upsc ups@"..ip, 'r')
+			data = f:read("*a")
+			f:close()
+		end
+		local ret = nil
+		for tup, val in data:gmatch("([%w%.]+): (.-)\r?\n") do
+			if tup then
+				if ret == nil then ret = {} end
+				local tup1,tup2,tup3 = tup:match("(%a+)%.(%a+)%.(%a+)")
+				if tup1 == nil then
+					tup1,tup2 = tup:match("(%a+)%.(%a+)")
+					if tup1 == nil then return false, nil end
+					if ret[tup1] == nil then ret[tup1] = {} end
+					if ret[tup1][tup2] == nil then ret[tup1][tup2] = {} end
+					ret[tup1][tup2].val = val
+				else  
+					if ret[tup1] == nil then ret[tup1] = {} end
+					if ret[tup1][tup2] == nil then ret[tup1][tup2] = {} end
+					if ret[tup1][tup2][tup3] == nil then ret[tup1][tup2][tup3] = {} end
+					ret[tup1][tup2][tup3].val = val
+				end
+			end
+		end   
+		return (ret ~= nil), ret
+	end
+	-- Analyse ups.status
+	local function CheckStatus(status)
+		local sts = nil
+		local alarm = false
+		for s in status:gmatch("%w+") do
+			if sts then 
+				sts = sts .. "," .. UPSSTATUS[s].msg
+			else     
+				sts = UPSSTATUS[s].msg
+			end     
+			alarm = alarm or UPSSTATUS[s].alarm
+		end
+		return alarm, sts
+	end	
+
+	-- Poll the UPS Status report and update plugin status
+    function refreshCache()
+        debug("refreshCache called")
+        -- Get polling period
+        local period = tonumber(varGet("PollSettings", SIDS.ZW_DEV))
+        if ((period ~= 0 and period &lt; 10) or period > 3600) then period = 300 end
+        if (period ~=0) then luup.call_delay("refreshCache", period) end
+		-- Get status details
+		local stat, ups_data = UPSCapture(DATA.ip)
+		if stat then
+			debug("Successful status read from " .. DATA.ip)
+			varSet("LastUpdate", os.time(), SIDS.HA_DEV)
+
+			-- Update batery level information
+			varSet("BatteryLevel", ups_data.battery.charge.val, SIDS.HA_DEV)
+			varSet("BatteryDate", os.time(), SIDS.HA_DEV)
+			-- Parse status details
+			local alarm, status = CheckStatus(ups_data.ups.status.val)
+			varSet("Status", status)
+			-- See if we have an alarm status
+			if alarm then
+                varSet("Tripped", "1", SIDS.SEC)
+                varSet("LastTrip", os.time(), SIDS.SEC)
+				local armed = varGet("Armed", SIDS.SEC)
+				varSet("ArmedTripped", armed, SIDS.SEC)
+			else
+                varSet("Tripped", "0", SIDS.SEC)
+                varSet("ArmedTripped", "0", SIDS.SEC)
+			end
+			if(ups_data.ups.load ~= nil and ups_data.ups.realpower.nominal ~= nil) then
+				local nompower = tonumber(ups_data.ups.realpower.nominal.val)
+				local loadpct = tonumber(ups_data.ups.load.val)
+				local currwatts = (loadpct / 100) * nompower
+				varSet("Watts", round(currwatts,2), SIDS.EM_PWR)
+			end
+
+			-- Store all details as variables. Is two or three level deep.
+			for k,v in pairs(ups_data) do
+				for l,w in pairs(v) do
+					if w.val then  
+						varSet(k.."."..l, w.val)
+					else
+						for m,x in pairs(w) do
+							varSet(k.."."..l.."."..m, x.val)
+						end      
+					end    
+				end    
+			end  
+			local pc = tonumber(varGet("PollOk", SIDS.ZW_DEV)) + 1
+			varSet("PollOk", pc, SIDS.ZW_DEV)
+		else
+			local pc = tonumber(varGet("PollNoReply", SIDS.ZW_DEV)) + 1
+			varSet("PollNoReply", pc, SIDS.ZW_DEV)
+			varSet("Status", "UPS read failed.")
+			log("refreshCache failed",3)
+		end
+    end
+
+    function startup(parentDevice)
+		-- See if plugin is disabled
+		local isDisabled = luup.attr_get("disabled", parentDevice)
+		if ((isDisabled == 1) or (isDisabled == "1")) then
+			log("Init: Plug-in - DISABLED",2)
+			DATA.Disabled = true
+			varSet("Status", "Plug-in disabled")
+			-- Now we are done. Mark device as disabled
+			return true, "Plug-in Disabled.", DATA.Description
+		end
+		DATA.Device = parentDevice
+        -- Set defaults for varaibles.
+        defVar("Version", DATA.Version)
+        defVar("PollSettings", "300", SIDS.ZW_DEV)
+        defVar("PollOk", "0", SIDS.ZW_DEV)
+        defVar("PollNoReply", "0", SIDS.ZW_DEV)
+        defVar("Status", "Waiting first poll")
+		-- See if we are running on openLuup. 
+		if (luup.version_major == 7) and (luup.version_minor == 0) then
+			debug("We are running on openLuup!!. Set Remote to 0")
+			defVar("Remote", "0")
+		else	
+			defVar("Remote", "1")
+		end
+		defVar("Tripped", "0", SIDS.SEC)
+		defVar("Armed", "0", SIDS.SEC)
+		defVar("ArmedTripped", "0", SIDS.SEC)
+        -- Validate that the IP address for NAS or script server is configured in Vera.
+		local ipa = luup.attr_get("ip", DATA.Device)
+		local ipAddress = string.match(ipa, '^(%d%d?%d?%.%d%d?%d?%.%d%d?%d?%.%d%d?%d?)')
+		if (ipAddress == nil) then
+			varSet("Status", "Configure IP Address.")
+			luup.set_failure(1, DATA.Device)
+			return false, "Configure IP Address.", DATA.Description
+		end
+		DATA.ip = ipAddress
+        log(" #" .. tostring(DATA.Device) .. " starting up with ip " .. DATA.ip)
+        defVar("Configured", "1", SIDS.HA_DEV)
+        defVar("FirstConfigured", os.time(), SIDS.HA_DEV)
+
+        -- Start polling
+        luup.call_delay("refreshCache", 60)
+		luup.set_failure(0, DATA.Device)
+		return true
+    end
+  </functions>
+  <incoming>
+  </incoming>
+  <startup>startup</startup>
+  <actionList>
+    <action>
+      <serviceId>urn:micasaverde-com:serviceId:SecuritySensor1</serviceId>
+      <name>SetArmed</name>
+      <run>
+        varSet("Armed", lul_settings.newArmedValue or "0", SIDS.SEC)
+      </run>
+    </action>
+    <action>
+      <serviceId>urn:micasaverde-com:serviceId:HaDevice1</serviceId>
+      <name>Poll</name>
+      <run>
+        -- Force refreshCache to get called in a Timer
+        luup.call_timer("refreshCache", 1, "1", "")
+      </run>
+    </action>
+    </actionList>
+</implementation>
