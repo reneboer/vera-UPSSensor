@@ -8,10 +8,10 @@ This is tested with an APC UPS attached to a Synology NAS and NUT on a Rasberry 
 When on Vera you need a remote server to run the upsc command. Put this php script in the default sever directory. 
 Configure the IP address of your NAS.
 For a Pi with Apache and default settings this is /var/www/html 
-<php
+&lt;php
   $nas_ip = '192.168.x.x';
   $output = shell_exec('upsc ups@'.$nas_ip);
-  echo "<pre>$output</pre>";
+  echo "&lt;pre>$output&lt;/pre>";
 ?>
   
 When you have installed on openLuup you do not need the php script, but then you need to set the Remote variable to 0.
