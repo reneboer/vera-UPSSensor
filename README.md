@@ -20,9 +20,7 @@ The only configuration required is to set the IP address for the web server runn
 When running local on openLuup you must enter the IP address of your NAS and set the Remote variable to 0. 
 
 Some more background information 
-
-   variables possible  http://networkupstools.org/docs/user-manual.chunked/apcs01.html 
-   
-   status details APC  http://www.mathstat.dal.ca/~selinger/ups/backups.html
+- variables possible  http://networkupstools.org/docs/user-manual.chunked/apcs01.html 
+- status details APC  http://www.mathstat.dal.ca/~selinger/ups/backups.html
 
 Have fun
