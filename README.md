@@ -5,9 +5,10 @@ This is tested with an APC UPS attached to a Synology NAS and NUT on a Rasberry 
 - Follow these instructions to install NUT https://www.domoticz.com/forum/viewtopic.php?t=2266
 - test the installtion using the command : upsc ups@(your NAS IP)
 
-When on Vera you need a remote server to run the upsc command. Put the php script in the default sever directory. 
+When on Vera you need a remote server to run the upsc command. Put the ups.php script in the default sever directory. 
 Configure the IP address of your NAS.
 For a Pi with Apache and default settings this is /var/www/html 
+You can test by a http request to (your server)/ups.php
 
 When you have installed on openLuup you do not need the php script, but then you need to set the Remote variable to 0.
 
