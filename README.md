@@ -3,7 +3,7 @@ Sensor device that monitors your UPS status can trigger an alert as needed.
 
 This is tested with an APC UPS attached to a Synology NAS on Vera UI7 and openLuup.
 
-Install the plugin by uploading the D_UPSSensor1.xml and I_UPSSensor1.xml files to your Vera. Then manually create a device using these two files.
+Install the plugin from the Vera App market on ALTUI App Store.
 
 The device is a default door/windows sensor so it will behave as such. Extra variables will be set like Watts, BatteryStatus and all data read from the UPS, just have a look.
 
