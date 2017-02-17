@@ -12,7 +12,7 @@ The only configuration required is to set the IP address for the UPS server in t
 This version does not support SSL communication so if your UPS server is setup for that this will not work.
 
 Some more background information 
-- variables possible  http://networkupstools.org/docs/user-manual.chunked/apcs01.html 
+- variables possible  http://networkupstools.org/docs/user-manual.chunked/apcs01.html
 - status details APC  http://www.mathstat.dal.ca/~selinger/ups/backups.html
 
 Have fun
