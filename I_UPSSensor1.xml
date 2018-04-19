@@ -7,7 +7,7 @@
 --[[  
 Read the status of a UPS via a UPS server attached to a NAS.
 
-Version 2.0 6 Jan 2017 by Rene Boer
+Version 2.1 19 April 2018 by Rene Boer
 
 This is tested with an APC UPS attached to a Synology NAS, but should work with many UPS servers as long as it does not expect an SSL connection.
 
@@ -23,6 +23,7 @@ Some more background information
 	variables possible 	http://networkupstools.org/docs/user-manual.chunked/apcs01.html
 	status details APC 	http://www.mathstat.dal.ca/~selinger/ups/backups.html
 ]]	
+
 	local socketLib = require ("socket")
     local SIDS = { 
 		PLG		= "urn:rboer-com:serviceId:UpsSensor",
@@ -38,7 +39,7 @@ Some more background information
 		Device 		= nil,
 		ip 			= nil,
 		port 		= 3493,
-		Version		= "2.0",
+		Version		= "2.1",
 		Description	= "UPS Sensor"
 	}	
 	-- Status codes in ups.status field
@@ -129,7 +130,7 @@ Some more background information
 				ret, _, _ = sock:receive()
 				local var, val
 				if ret then 
-					var, val = ret:match('VAR ups ([%w%.]+) "(.+)"') 
+					var, val = ret:match('VAR '..upsName ..' ([%w%.]+) "(.+)"') 
 				else
 					var = nil
 				end
@@ -205,7 +206,7 @@ Some more background information
 		end
 		DATA.Device = parentDevice
         -- Set defaults for varaibles.
-        defVar("Version", DATA.Version)
+        varSet("Version", DATA.Version)
         defVar("UPSName", 'ups')
         defVar("PollSettings", "300", SIDS.ZW_DEV)
         defVar("PollOk", "0", SIDS.ZW_DEV)
